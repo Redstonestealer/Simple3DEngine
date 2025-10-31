@@ -13,7 +13,7 @@ public class Main {
         c.moveAlongLocalAxis(Direction.FORWARD, 2.0, false);
         c.moveAlongLocalAxis(Direction.UP, -1.0, true);
 
-        int WIDTH = 500;
+        int WIDTH = 600;
         int HEIGHT = 300;
         Backend b = new Backend();
         b.init(WIDTH, HEIGHT);

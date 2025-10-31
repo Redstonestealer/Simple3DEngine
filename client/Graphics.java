@@ -90,13 +90,46 @@ public class Graphics extends Thread {
         this.world=new World();
         checkInstallation();
 
-        Tool.createImage("C:\\server\\plugins lol\\hyblock\\Simple3DEngine\\src\\Jonas.jpg",
-                world,
-                new Point3D(-40.,30., 50.),
-                new Point3D(40., 30., 50.),
-                new Point3D(-40.0, -30.,50.),
-                new Point3D(40.,-30.,50.));
-        //Tool  .createGrid(world);
+        MonoMaterial m = new MonoMaterial(1.0, 0.0, 0.0,
+                1.0, 0.0, 0.2); // new Material(1.0, 0.0, .0, 1.0, 0.0, 0.2);
+
+        world.addTriangle(new Triangle(new Point3D(.0, -5.0, 5.),
+                new Point3D(1., 0., 5.0),
+                new Point3D(0., 1., 5.), m));
+        world.addTriangle(new Triangle(
+                new Point3D(.0, 1., 5.),
+                new Point3D(10., 1., 5.),
+                new Point3D(0., 1., -5.),
+                new MonoMaterial(
+                        0.0,
+                        0.2,
+                        0.7,
+                        0.5,
+                        0.0,
+                        0.8
+                )
+        ));
+        // rough 0.5 refl 0.8 -> Watery stone effect
+
+
+        world.addTriangle(new Triangle(
+                new Point3D(.0, -3., 5.),
+                new Point3D(1., -3., 5.),
+                new Point3D(0., -3., 3.),
+                new MonoMaterial(
+                        0.0,
+                        0.0,
+                        1.0,
+                        0.0,
+                        0.0,
+                        0.8
+                )
+        ));
+
+
+
+        world.setDefaultLight(new MonoMaterial(0.05, 0.4, 0.9, 0.0, 1.0, 0.0)
+);
 
         screen = new ScreenEmulator(this.canvas, 1);
     }
@@ -126,7 +159,6 @@ public class Graphics extends Thread {
 
 
             // DRAW here
-            final MonoMaterial lighting = new MonoMaterial(0.05, 0.05, 0.05, 0.0, 1.0, 0.0);
 
 
             final int hw = screen.getWidth()/2;
@@ -151,17 +183,18 @@ public class Graphics extends Thread {
                             Math.tan(hfov)*c.getNear()*dy,
                             c.getNear()*5
                     );*/
+                    final int factor = 100;
 
                     Vector3D startRay = Vector3D.add(
-                            c.getRightSideDirection().factor(Math.tan(hfov*height/width)*forwardMagnitude*dx),
-                            c.getUpwardsDirection().factor(Math.tan(hfov)*forwardMagnitude*dy),
-                            c.getForwardDirection()
+                            c.getRightSideDirection().factor(Math.tan(hfov*height/width)*forwardMagnitude*dx*factor),
+                            c.getUpwardsDirection().factor(Math.tan(hfov)*forwardMagnitude*dy*factor),
+                            c.getForwardDirection().factor(factor)
                     );
                     /*
                     We're shooting multiple rays the same way, so that they can scatter around differently and create a more natural looking image
                     We set the amount of repetitions to 4 (for now)
                      */
-                    final int maxRep=1;
+                    final int maxRep=4;
                     // We also want to keep track of all resulting materials, to then average them out
                     ArrayList<PixelColor> finalPixelColors = new ArrayList<>();
                     for (int re = 0; re<maxRep; re++){
@@ -170,14 +203,21 @@ public class Graphics extends Thread {
 
                         // Create a list of all encountered colors
                         ArrayList<PixelColor> pixelColors = new ArrayList<>();
-                        // Marching up to 100 ray lengths
-                        final int maxD = 60;
+                        // Marching up to 5 reflections
+                        final int maxD = 5;
+                        // Also keeping track if it encountered any triangles this time
+                        // set to true to satisfy the first condition
+                        boolean encounteredTriangle=true;
                         // Save previous point to compare (check if hitting triangle)
                         Point3D prev = c.getLocation();
 
-                        for( int d = 0; d<maxD; d++){
+
+
+                        for( int d = 0; d<maxD && encounteredTriangle; d++){
                             // Calculate new point
                             Point3D curr = new Point3D(prev.getX()+ray.x, prev.getY()+ray.y, prev.getZ()+ray.z);
+                            // Set encounter triangle to false
+                            encounteredTriangle=false;
                             // We could also possibly encounter multiple triangles in this step. To prevent any unwanted behavior,
                             // we keep track of all intersections and calculate at the end of this march which triangle is the closest
                             // (and should thus be our new starting point). This can be done by checking whose k (see intersection) is smaller
@@ -189,9 +229,10 @@ public class Graphics extends Thread {
                                 // The normal vector is the one looking away from the triangle plane (normal vector)
                                 // If the 2 points are on different sides of the plane, their dot product will have different signs
                                 double prev_dot = Vector3D.dotProduct(t.getNormalVector(), prev.getVector().add(t.getA().getVector().invert()));
+                                if (Math3D.getSign(prev_dot) != Sign.POSITIVE) continue; // If the ray is coming from the wrong side, we can skip everything
                                 double curr_dot = Vector3D.dotProduct(t.getNormalVector(), curr.getVector().add(t.getA().getVector().invert()));
                                 // Now compare
-                                if (Math3D.getSign(prev_dot)!=Math3D.getSign(curr_dot) && Math3D.getSign(prev_dot)== Sign.POSITIVE){
+                                if (Math3D.getSign(prev_dot)!=Math3D.getSign(curr_dot)){
                                     /*
                                     If this is true, the ray has pierced through the plane.
                                     Now we need to verify if the point P, where the plane was pierced, is also inside the triangle
@@ -261,6 +302,9 @@ public class Graphics extends Thread {
                             }
                             // Now we must process the RayResults we collected. We check each one and look for the closest one
                             if (rayResults.size()!=0){
+                                // As we encountered a triangle, we keep track of it:
+                                encounteredTriangle=true;
+
                                 RayResult closest = null;
                                 double distance = -1;
                                 for (RayResult r: rayResults){
@@ -282,7 +326,7 @@ public class Graphics extends Thread {
                         // Once we reach this, we know the ray has been shot all the way. Now we must just calculate the color of the pixel.
                         // For this we use the list of materials we have
                         // First, we add the sourround light material though
-                        PixelColor result = lighting.getMaterialAtPoint(0.0,0.0);
+                        PixelColor result = world.getDefaultLight();
                         // We now go backwards and always calculate the new colors as follows:
                         /*
                         m is the material, ref is the reflectiveness, p is the previously calculated material
